@@ -335,6 +335,9 @@ E1=np.array(E1)
 E2=np.array(E2)
 
 
+#hello !!!
+
+
 
 #plotting the curves, it should resemble Fig. 1 in Bergamasco 
 import matplotlib.pyplot as plt
