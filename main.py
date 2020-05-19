@@ -6,8 +6,9 @@ import time
 tau = time.time() 
 
 #matrices for elliptic and hyperbolic behaviour
-Mh=np.array([[2.0,1],[3,2]])
+Mh=np.array([[2.0,1.0],[3.0,2.0]])
 Me=np.array([[0.0,1],[-1,0.0]])
+Id=np.array([[1.0,0],[0.0,1.0]])
 
 pospesi=True # @jit(nopython=pospesi)  <- activating JustInTime compilation for faster computing
     
@@ -134,12 +135,12 @@ def c_density(N, Q,P,qsigma,psigma): #get gauss state for classical system
 
 @jit(nopython=pospesi) 
 def joint_ro(N,ro1,ro2): #join two NxN classical state to N^2xN^2 state
-    joined=np.zeros((N*N,N*N))
+    joined=np.zeros((N*N,N*N),dtype=np.float_)
     for q1 in range(0,N):
         for p1 in range(0,N):
             for q2 in range(0,N):
                 for p2 in range(0,N):
-                    joined[q1*N+p1][q2*N+p2]+=ro1[q1][p1]*ro2[q2][p2]
+                    joined[q1*N+p1][q2*N+p2]=((ro1[q1][p1]*ro2[q2][p2])**2+joined[q1*N+p1][q2*N+p2]**2)**0.5
     #joined=normiraj(joined)
     #joined=joined/np.sum(joined)
     return joined
@@ -178,18 +179,28 @@ def coupled_cat_c(N,ro,M,Kc,K): #classical propagator for N^2xN^2 state
                     p2=float(P2)/float(N)
                     prej1=np.array([q1, p1 + eps(K,q1)+kappa(Kc, q1,q2)])
                     prej2=np.array([q2, p2 + eps(K,q2)+kappa(Kc, q1,q2)])
+                    prej1%=1.0
+                    prej2%=1.0
                     koo1=np.dot(M,prej1)
                     koo2=np.dot(M,prej2)
-                    Q_1,P_1=priredi(N,koo1)
-                    Q_2,P_2=priredi(N,koo2)
+                    #koo1=prej1
+                    #koo2=prej2
+                    Q_1,P_1=priredi(N,koo2)
+                    Q_2,P_2=priredi(N,koo1)
+                    #Q_1,P_1=int(np.random.rand()*N),int(np.random.rand()*N)
+                    #Q_2,P_2=int(np.random.rand()*N),int(np.random.rand()*N)
+                    #print(Q_1,P_1)
                     new[Q_1*N+P_1][Q_2*N+P_2]=(ro[Q1*N+P1][Q2*N+P2]**2+new[Q_1*N+P_1][Q_2*N+P_2]**2)**0.5
+                    #new[Q_1*N+P_1][Q_2*N+P_2]+=ro[Q1*N+P1][Q2*N+P2]
                     
     return new
 
 @jit(nopython=pospesi)  
 def priredi(N,koo): #round the classical cooridantes to the closest discrete ones
     koo%=1.0
-    return int(round(koo[0]*float(N),0)),int(round(koo[1]*float(N),0))
+    Q=int(round(koo[0]*float(N),0))%N
+    P=int(round(koo[1]*float(N),0))%N
+    return Q, P
     
 @jit(nopython=pospesi) 
 def get_e(s): #get the entropy from the diagonal elements from SVD
@@ -212,10 +223,11 @@ def get_e2(s,ro): #get the entropy from the diagonal elements from SVD, but with
     norma=0
     seznam=[]
     for i in range(0,len(s)):
-        seznam.append(s[i])
-        norma+=s[i]**2
+        if(s[i]>0):
+            seznam.append(s[i])
+            norma+=s[i]**2
     seznam=np.array(seznam)
-    seznam=seznam/np.sqrt(norm(seznam))
+   # seznam=seznam/np.sqrt(norm(seznam))
     #seznam=seznam/np.sqrt(np.sum(RO**2))
     for i in range(0,len(seznam)):
         x=seznam[i]**2
@@ -238,11 +250,11 @@ def join_exp(N,psi1,psi2):
             w[i][j]=psi1[i]*psi2[j]
     return w
 
-N=2**4
+N=2**5
 Kc=0.5 #just like in Bergamasco
 K=0.25 #just like in Bergamasco
-M=Mh #choosing hyperbolic regimefro both systems
-
+M=Me #choosing hyperbolic regimefro both systems
+hc=1.0/float(N)
 Q=int(N/2) #starting position in int
 P=int(N/2)#starting position in int
 q0=float(Q)/float(N) #starting position in float
@@ -251,24 +263,27 @@ p0=float(P)/float(N) #starting position in float
 
 psi=get_psi_gauss(N,q0,p0,Q,P)  #get coherent state
 h=1/(2*np.pi*float(N))          #get hbar
-#ro=c_density(N,Q,P,h**0.5,h**0.5) #get gauss state
-ro=c_density(N,Q,P,h**0.5,h**0.5)
+ro=c_density(N,Q,P,h**0.5,h**0.5) #get gauss state
+
+#ro=ro/(float(N)**2)
 #ro=ro*ro #get the normalization right
 PSI=joint_psi(psi,psi) #get quantum joint state
 RO=joint_ro(N,ro,ro)   #get classical joint state
+#RO=RO-RO+1.0
+#RO=RO/np.sqrt(np.sum(RO*RO))
 #RO=join_exp(N*N, np.real(np.conj(PSI)*PSI), np.real(np.conj((ft(N*N,PSI)))*(ft(N*N,PSI))))
 #ro=join_exp(N, np.real(np.conj(psi)*psi), np.real(np.conj((ft(N,psi)))*(ft(N,psi))))
 #RO=np.sqrt(RO)
 
 
 E1,E2,E3,E4,E5=[],[],[],[],[] #memorizing the results
-for i in range(0,10): #number of time steps
+for i in range(0,20): #number of time steps
     print('cas:'+str(time.time()-tau))
-    E1.append(entropy_c(N,RO*RO)) #classical entropy
+    E1.append(entropy_c2(N,RO)) #classical entropy
     E2.append(entropy_q(N,PSI))           # quantum von neumann entropy
     RO=coupled_cat_c(N,RO,M,Kc,K)         #propagating classical state
     PSI=coupled_cat_q(N,M,Kc,K,PSI)        #propagating quantum state
-E1.append(entropy_c(N,RO*RO))
+E1.append(entropy_c2(N,RO))
 E2.append(entropy_q(N,PSI))
 
 E1=np.array(E1)/2
