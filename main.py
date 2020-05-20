@@ -169,8 +169,9 @@ def entropy_q (N, psi):  #von Neumann entropy
     u, s, vh = np.linalg.svd(PSI, full_matrices=True)
     return get_e(s)
 
+@jit(nopython=pospesi) 
 def entropy_qhat(N, psi):#rho operator entropy
-    PSI=np.zeros([N*N,N*N])+0j
+    PSI=np.zeros((N*N,N*N),dtype=np.complex_)
     for a1 in range(0,N):
         for a2 in range(0,N):
             for b1 in range(0,N):
@@ -203,7 +204,7 @@ def joint_ro(N,ro1,ro2): #join two NxN classical state to N^2xN^2 state
         for p1 in range(0,N):
             for q2 in range(0,N):
                 for p2 in range(0,N):
-                    joined[q1+N*p1][q2+N*p2]+=ro1[q1][p1]*ro2[q2][p2]
+                    joined[q1*N+p1][q2*N+p2]+=ro1[q1][p1]*ro2[q2][p2]
     #joined=normiraj(joined)
     joined=joined/np.sum(joined)
     return joined
@@ -302,21 +303,30 @@ def cutoff(N,ro):  #deleting the non-important elements from matrix
                 RO[i][j]=0
     return RO
 
-N=21 #odd; 260s per time step for N=63, so 2600s for 10 time steps
+def get_random_psi(N,avg,sigma):
+    temp1=[]
+    for i in range(0, N):
+        temp1.append(np.random.randn()*sigma+avg+1j*(np.random.randn()*sigma+avg))
+    temp1=np.array(temp1)
+    temp1=temp1/(np.sum(temp1*np.conj(temp1)))**0.5
+    return temp1
+
+N=11 #odd; 260s per time step for N=63, so 2600s for 10 time steps
 Kc=0.5 #just like in Bergamasco
 K=0.25 #just like in Bergamasco
 M=Mh #choosing hyperbolic regimefro both systems
 
-Q=0 #starting position in int
-P=0 #starting position in int
+Q=3 #starting position in int
+P=-3 #starting position in int
 q0=float(Q)/float(N) #starting position in float
 p0=float(P)/float(N) #starting position in float
 
 
-psi=get_psi_gauss(N,q0,p0,Q,P)  #get coherent state
+#psi=get_psi_gauss(N,q0,p0,Q,P)  #get coherent state
+psi=get_random_psi(N,1.0,1.0)
 h=1/(2*np.pi*float(N))          #get hbar
 ro=c_density(N,Q,P,h**0.5,h**0.5) #get gauss state
-ro=ro*ro #get the normalization right
+#ro=ro*ro #get the normalization right
 PSI=joint_psi(psi,psi) #get quantum joint state
 RO=joint_ro(N,ro,ro)   #get classical joint state
 
@@ -324,26 +334,48 @@ RO=joint_ro(N,ro,ro)   #get classical joint state
 E1,E2,E3,E4,E5=[],[],[],[],[] #memorizing the results
 for i in range(0,10): #number of time steps
     print('cas:'+str(time.time()-tau))
-    E1.append(entropy_c2(N,cutoff(N,RO))) #classical entropy
-    E2.append(entropy_q(N,PSI))           # quantum von neumann entropy
-    RO=coupled_cat_c(N,RO,M,Kc,K)         #propagating classical state
+    #E1.append(entropy_c2(N,cutoff(N,RO))) #classical entropy
+    E2.append(entropy_q(N,PSI))
+    E3.append(entropy_c(N,get_wigner2(N, PSI)))
+    E4.append(entropy_qhat(N, PSI))
+    #RO=coupled_cat_c(N,RO,M,Kc,K)         #propagating classical state
     PSI=coupled_cat_q(N,M,Kc,K,PSI)        #propagating quantum state
-E1.append(entropy_c2(N,cutoff(N,RO)))
 E2.append(entropy_q(N,PSI))
+E3.append(entropy_c(N,get_wigner2(N, PSI)))
+E4.append(entropy_qhat(N, PSI))
 
-E1=np.array(E1)
 E2=np.array(E2)
+E3=np.array(E3)/2
+E4=np.array(E4)/2
 
+
+
+ticks=[]
+for i in range(0,N):
+    premik=int((N-1)/2)
+    ticks.append(float(i-premik)/float(N))
 
 
 #plotting the curves, it should resemble Fig. 1 in Bergamasco 
 import matplotlib.pyplot as plt
 from matplotlib import  cm
 
-plt.plot(E1/2)
-plt.plot(E2)
+from matplotlib import rc
+rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+## for Palatino and other serif fonts use:
+#rc('font',**{'family':'serif','serif':['Palatino']})
+rc('text', usetex=True)
+rc('text.latex', preamble=r'\usepackage{amsmath}')
 
-plt.legend(['C','Q'])
+
+plt.plot(E2,'o')
+plt.plot(E3,'-x')
+plt.plot(E4,'-.')
+plt.legend(['E','h[W]/2', 'h[ $ \hat{ \\rho } $ ]/2'])
+plt.xlabel('Time steps')
+plt.ylabel('Entropy')
+plt.tight_layout()
+plt.savefig('entropies_comp1.pdf')
 print('cas:'+str(time.time()-tau))
 
 
@@ -351,28 +383,42 @@ print('cas:'+str(time.time()-tau))
 
 
 '''
-plt.plot(np.conj(psi)*psi)
-plt.plot(np.conj((ft(N,psi)))*(ft(N,psi)))
-plt.show()
-plt.clf()
+plt.plot(ticks,np.conj(psi)*psi,'-*')
+plt.plot(ticks,np.conj((ft(N,psi)))*(ft(N,psi)))
+plt.legend(['Position rep.','Momentum rep.'])
+ax.axis('equal')
+plt.xlabel('Eigenvalue')
+plt.ylabel('Probability')
+plt.tight_layout()
+plt.savefig('psi_psi_N=21_t=0_moved.pdf')
+
+
 
 W=get_wigner(N,psi)
-W=np.abs(W)
-W=W/np.sum(W)
+#W=np.abs(W)
+#W=W/np.sum(W)
 fig, ax = plt.subplots()
-cs = ax.contourf(W, cmap=cm.PuBu_r)
+cs = ax.contourf(ticks,ticks,W, cmap=cm.PuBu_r)
 cbar = fig.colorbar(cs)
+cbar.ax.set_ylabel('Probability')
 ax.axis('equal')
-plt.show()
+plt.ylabel('Position')
+plt.xlabel('Momentum')
+plt.tight_layout()
+plt.savefig('wigner_psi_N=21_t=0_moved.pdf')
 print('cas:'+str(time.time()-tau))
-plt.clf()
+
 
 h=1/(2*np.pi*float(N))
 RO=c_density(N,Q,P,h**0.5,h**0.5)
 RO=RO*RO
 fig, ax = plt.subplots()
-cs = ax.contourf(RO, cmap=cm.PuBu_r)
+cs = ax.contourf(ticks,ticks, ro*ro, cmap=cm.PuBu_r)
 cbar = fig.colorbar(cs)
+cbar.ax.set_ylabel('Probability')
 ax.axis('equal')
-plt.show()
+plt.ylabel('Position')
+plt.xlabel('Momentum')
+plt.tight_layout()
+plt.savefig('diff_N=21_t=0.pdf')
 '''
