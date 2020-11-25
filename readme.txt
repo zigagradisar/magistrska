@@ -1,1 +1,1 @@
-moj seminar/magistrsko o primerjavi kvantne in klasične mehanike na torusu. Zankrat samo koda.
+Magistrska naloga; problem je v klasični dinamiki, ki jo še nisel uspel pravilno sprogramirati. Zato se dodal (celotno) kodo in pa pdf, ki v detajle razloži, kako sem razmišljal.
